@@ -285,16 +285,14 @@ def solve_afk_puzzle():
     print("\n🚨 [DETECTED] เจอหน้าจอ Anti-AFK แล้ว! เริ่มแก้ด้วย Traditional CV...")
     print("-" * 50)
     
-    previous_cards = None
-    safe_wait = 5  # วินาทีรอแอนิเมชันด่านแรก
-    
     for stage in range(1, 4):
         print(f"\n🧩 ด่านที่ {stage}/3")
+        print("⏳ กำลังรอการ์ดเซ็ตใหม่ปรากฏและหยุดนิ่ง...")
         
-        # รอการ์ดนิ่งและเป็นด่านใหม่
-        current_cards = wait_for_stable_cards(timeout=safe_wait)
+        # ใช้ระบบใหม่: รอจนกว่าภาพจะนิ่ง 1.5 วินาที
+        current_cards = wait_for_stable_cards(timeout=15, stable_time=1.5)
         if current_cards is None:
-            print("⚠️ ไม่สามารถ capture การ์ดได้ ข้ามด่านนี้")
+            print("⚠️ ไม่สามารถ capture การ์ดที่นิ่งได้ ข้ามด่านนี้")
             continue
         
         # วิเคราะห์หา 2 ใบแปลก
@@ -302,8 +300,8 @@ def solve_afk_puzzle():
         
         # ถ้า confidence ต่ำมาก ให้ capture ใหม่ครั้งหนึ่ง
         if conf < 0.05:
-            print(f"⚠️ Confidence ต่ำ ({conf:.2%}) กำลัง capture ใหม่...")
-            time.sleep(0.5)
+            print(f"⚠️ Confidence ต่ำ ({conf:.2%}) ขอเวลาให้ชัวร์แล้ว capture ใหม่...")
+            time.sleep(1.0)
             current_cards = capture_cards()
             target1, target2, conf = detect_odd_two_cards(current_cards, debug=True)
         
@@ -315,31 +313,43 @@ def solve_afk_puzzle():
         time.sleep(0.3)
         click_card(target2)
         
-        previous_cards = current_cards
-        safe_wait = 3  # ด่านถัดไปรอไม่นานเท่าด่านแรก
-        
         if stage < 3:
-            time.sleep(2.5)  # รอด่านเปลี่ยน
-    
+            print("⏳ รอแอนิเมชันเปลี่ยนด่าน...")
+            time.sleep(3.5) # ⚠️ เพิ่มเวลาเผื่อแอนิเมชันไพ่หายและแจกใหม่ให้ชัวร์
+            
     print("\n✅ แก้ Anti-AFK เสร็จสมบูรณ์!")
     print("-" * 50)
 
 
-def wait_for_stable_cards(timeout=10):
-    """
-    รอจนกว่าการ์ดจะนิ่งและพร้อมวิเคราะห์
-    """
+def wait_for_stable_cards(timeout=15, stable_time=1.5):
+    
     start = time.time()
+    prev_cards = None
+    stable_start = None
     
     with MSS() as sct:
         while time.time() - start < timeout:
-            cards = capture_cards()
+            curr_cards = capture_cards()
             
-            if cards is not None and len(cards) == 6:
-                return cards
+            if curr_cards is not None and len(curr_cards) == 6:
+                if prev_cards is not None:
+                    
+                    diff = sum(cv2.norm(c, p, cv2.NORM_L2) for c, p in zip(curr_cards, prev_cards))
+                    
+                    if diff < 500: 
+                        if stable_start is None:
+                            stable_start = time.time()
+                        elif time.time() - stable_start >= stable_time:
+                            print("  📸 ภาพหยุดนิ่งแล้ว! พร้อมวิเคราะห์")
+                            return curr_cards 
+                    else:
+                        stable_start = None 
+                
+                prev_cards = curr_cards
             
-            time.sleep(0.3)
-    
+            time.sleep(0.2)
+            
+    print("⚠️ รอภาพนิ่งนานเกินไป (Timeout)")
     return None
 
 
