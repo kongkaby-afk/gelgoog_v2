@@ -389,11 +389,19 @@ def run_phase_3():
     click_image("ok_btn", timeout=5)
     click_image("open_all_btn", timeout=5)
     
-    # 5. วนกด Confirm กลับ Main Menu
-    print("\n🔄 กำลังกด Confirm เพื่อกลับไปหน้าหลัก...")
+    # 5. วนกด Confirm เพื่อเคลียร์ Pop-up ให้เกลี้ยงแล้วกลับ Main Menu
+    print("\n🔄 กำลังเคลียร์หน้าต่าง Pop-up เพื่อกลับไปหน้าหลัก...")
     start_confirm_time = time.time()
     
     while time.time() - start_confirm_time < 60:
+        # 1. ให้ความสำคัญกับการเคลียร์ Pop-up ก่อน ถ้าเจอต้องกด!
+        clicked_confirm = click_image("confirm_btn", timeout=1, delay_after=1.5)
+        
+        if clicked_confirm:
+            # ถ้าเพิ่งกดไป ให้วนลูปกลับไปเช็คใหม่เผื่อมี Pop-up ซ้อนกันอีก ห้ามเพิ่งเช็ค Main Menu
+            continue
+            
+        # 2. ถ้าหาปุ่ม Confirm ไม่เจอแล้ว (Pop-up หมดแล้ว) ค่อยมาเช็คว่าถึงหน้า Main Menu จริงๆ หรือยัง
         try:
             pyautogui.locateOnScreen(ASSETS["main_menu_sign"], confidence=CONFIDENCE)
             print("\n" + "=" * 55)
@@ -402,9 +410,7 @@ def run_phase_3():
             return True
         except pyautogui.ImageNotFoundException:
             pass
-        
-        click_image("confirm_btn", timeout=2, delay_after=1)
-    
+            
     print("❌ วนลูปกด Confirm นานเกินไป หาหน้า Main ไม่เจอ")
     return False
 
