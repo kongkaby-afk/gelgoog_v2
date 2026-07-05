@@ -71,6 +71,7 @@ ASSETS = {
     "open_all_btn": "assets/open_all_btn.png",
     "confirm_btn": "assets/confirm_btn.png",
     "main_menu_sign": "assets/main_menu_sign.png",
+    "confirm_green_btn": "assets/confirm_green_btn.png", 
 }
 
 templates = {name: load_template(path, cv2.IMREAD_UNCHANGED) for name, path in ASSETS.items()}
@@ -239,15 +240,14 @@ def wait_for_image(image_key, timeout=60):
 # ==========================================
 # 🛡️ ระบบตรวจจับหน้า Anti-AFK
 # ==========================================
+# ==========================================
+# 🛡️ ระบบตรวจจับหน้า Anti-AFK (อัปเดตใหม่)
+# ==========================================
 def wait_for_afk_page(timeout=AFK_WAIT_TIMEOUT, threshold=AFK_THRESHOLD, monitor_index=1):
-    """
-    รอและตรวจหาหน้า Anti-AFK แบบวนลูป
-    """
     if AFK_TEMPLATE_GRAY is None:
-        print("❌ ไม่สามารถตรวจ AFK ได้เพราะ Template โหลดไม่ติด")
         return False
     
-    print(f"⏳ เริ่มตรวจหาหน้า Anti-AFK (timeout {timeout} วิ, threshold {threshold})...")
+    print(f"⏳ เริ่มตรวจหาหน้า Anti-AFK (timeout {timeout} วิ)...")
     start = time.time()
     
     with MSS() as sct:
@@ -255,74 +255,220 @@ def wait_for_afk_page(timeout=AFK_WAIT_TIMEOUT, threshold=AFK_THRESHOLD, monitor
             try:
                 screenshot = np.array(sct.grab(sct.monitors[monitor_index]))
                 screen_gray = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
-                
                 res = cv2.matchTemplate(screen_gray, AFK_TEMPLATE_GRAY, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, max_loc = cv2.minMaxLoc(res)
-                
-                print(f"  [AFK Check] max_val={max_val:.3f} at {max_loc}")
                 
                 if max_val >= threshold:
                     print(f"🚨 เจอหน้า Anti-AFK! max_val={max_val:.3f}")
                     return True
-                
-                # บันทึกภาพล่าสุดเอาไว้ debug
-                cv2.imwrite("debug/last_afk_check.png", screen_gray)
-                
             except Exception as e:
-                print(f"⚠️ Error ตรวจ AFK: {e}")
-            
+                pass
             time.sleep(0.5)
-    
-    print(f"❌ หมดเวลาตรวจหา Anti-AFK ({timeout} วิ) - ไม่เจอ")
-    print("💾 บันทึกภาพสุดท้ายไว้ที่ debug/last_afk_check.png")
+            
+    print("⏩ ไม่พบหน้าต่าง Anti-AFK ข้ามไปขั้นตอนต่อไป")
     return False
 
+def is_afk_screen_present(threshold=AFK_THRESHOLD, monitor_index=1):
+    """ฟังก์ชันเช็คแบบเรียลไทม์ว่าป้าย Anti-AFK ยังอยู่บนจอหรือไม่"""
+    if AFK_TEMPLATE_GRAY is None:
+        return False
+    with MSS() as sct:
+        screenshot = np.array(sct.grab(sct.monitors[monitor_index]))
+        screen_gray = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
+        res = cv2.matchTemplate(screen_gray, AFK_TEMPLATE_GRAY, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        return max_val >= threshold
 
 def solve_afk_puzzle():
     """
-    แก้ Anti-AFK 3 ด่าน
+    แก้ Anti-AFK แบบ Dynamic Loop ทำจนกว่าป้าย AFK จะหายไป (ใช้ Smart Delay)
     """
-    print("\n🚨 [DETECTED] เจอหน้าจอ Anti-AFK แล้ว! เริ่มแก้ด้วย Traditional CV...")
+    print("\n🚨 [DETECTED] เจอหน้าจอ Anti-AFK! เริ่มแก้วนลูปแบบไดนามิก...")
     print("-" * 50)
     
-    for stage in range(1, 4):
-        print(f"\n🧩 ด่านที่ {stage}/3")
-        print("⏳ กำลังรอการ์ดเซ็ตใหม่ปรากฏและหยุดนิ่ง...")
+    stage = 1
+    max_retries = 10
+    
+    while is_afk_screen_present():
+        if stage > max_retries:
+            print("❌ [ERROR] วนลูปแก้ AFK เกิน 10 รอบ! บังคับออกเพื่อป้องกันจอค้าง")
+            break
+            
+        print(f"\n🧩 กำลังแก้ด่านที่ {stage}")
+        print("⏳ รอแอนิเมชันแจกไพ่ 2.5 วินาที...")
+        time.sleep(2.5) # ใช้การหน่วงเวลาตายตัวรอไพ่วางเสร็จ
         
-        # ใช้ระบบใหม่: รอจนกว่าภาพจะนิ่ง 1.5 วินาที
-        current_cards = wait_for_stable_cards(timeout=15, stable_time=1.5)
-        if current_cards is None:
-            print("⚠️ ไม่สามารถ capture การ์ดที่นิ่งได้ ข้ามด่านนี้")
-            continue
+        # แคปภาพทันทีโดยไม่ต้องสนว่าภาพขยับอยู่หรือไม่
+        current_cards = capture_cards(debug=True)
+            
+        target1, target2, conf = detect_odd_two_cards(current_cards, method="ncc", debug=True)
         
-        # วิเคราะห์หา 2 ใบแปลก
-        target1, target2, conf = detect_odd_two_cards(current_cards, debug=True)
-        
-        # ถ้า confidence ต่ำมาก ให้ capture ใหม่ครั้งหนึ่ง
-        if conf < 0.05:
-            print(f"⚠️ Confidence ต่ำ ({conf:.2%}) ขอเวลาให้ชัวร์แล้ว capture ใหม่...")
+        # ถ้าระบบคำนวณแล้วงง แปลว่าอาจจะแคปจังหวะไพ่กระพริบพอดี ให้ลองแคปใหม่
+        if conf < 0.01:
+            print(f"⚠️ Confidence ต่ำ ({conf:.2%}) ลองแคปภาพซ้ำอีกรอบ...")
             time.sleep(1.0)
-            current_cards = capture_cards()
-            target1, target2, conf = detect_odd_two_cards(current_cards, debug=True)
+            current_cards = capture_cards(debug=True)
+            target1, target2, conf = detect_odd_two_cards(current_cards, method="ncc", debug=True)
         
-        print(f"🎯 แปลก 2 ใบ: ใบที่ {target1+1} และ ใบที่ {target2+1}")
+        print(f"🎯 สรุปผล: เลือกใบที่ {target1+1} และ {target2+1}")
         
-        # กดการ์ด 2 ใบ
         time.sleep(0.5)
         click_card(target1)
         time.sleep(0.3)
         click_card(target2)
         
-        if stage < 3:
-            print("⏳ รอแอนิเมชันเปลี่ยนด่าน...")
-            time.sleep(3.5) # ⚠️ เพิ่มเวลาเผื่อแอนิเมชันไพ่หายและแจกใหม่ให้ชัวร์
+        print("⏳ รอดูผลลัพธ์และรอแจกไพ่ชุดใหม่...")
+        time.sleep(3.5) 
+        
+        stage += 1
+        
+    print("\n✅ หน้าต่าง Anti-AFK หายไปแล้ว! กลับสู่กระบวนการปกติ")
+    print("-" * 50)
+
+# ==========================================
+# 🚀 ฟังก์ชันหลัก Phase 3 (อัปเดตเคลียร์ Pop-up)
+# ==========================================
+# ==========================================
+# 🚀 ฟังก์ชันหลัก Phase 3 (ลอจิกสแกนเคลียร์ Pop-up อัตโนมัติ)
+# ==========================================
+def run_phase_3():
+    print("=" * 55)
+    print("🏁 [PHASE 3] เริ่มต้นระบบจัดการหลังจบเกม")
+    print("=" * 55)
+    
+    check_display_scale()
+    
+    # 1. รอปุ่ม Relay
+    if not wait_for_image("relay_btn", timeout=600):
+        print("❌ รอนานเกินไป ไม่พบปุ่ม Relay")
+        return False
+    
+    # 2. ลำดับออกจากเกม
+    click_image("relay_btn", timeout=5)
+    click_image("stop_btn", timeout=5)
+    click_image("quit_btn", timeout=5)
+    time.sleep(1)
+    click_image("quit_confirm_btn", timeout=5)
+    
+    # 3. ตรวจสอบ Anti-AFK
+    print("\n🛡️ กำลังตรวจสอบหน้าจอ Anti-AFK...")
+    if wait_for_afk_page(timeout=15): 
+        solve_afk_puzzle()
+    else:
+        print("⏩ ไม่พบหน้าต่าง Anti-AFK ข้ามไปหน้า Result ทันที")
+    
+    # 4. วนลูปสแกนปุ่มและเคลียร์ Pop-up จนกว่าจะเห็นหน้า Main Menu
+    print("\n🔄 กำลังเคลียร์หน้าต่าง Pop-up ทั้งหมดจนกว่าจะถึงหน้า Main Menu...")
+    start_clear_time = time.time()
+    
+    # รายชื่อปุ่มทั้งหมดที่โผล่มาขวางได้ (เรียงตามความสำคัญ)
+    popup_buttons = ["ok_btn", "open_all_btn", "confirm_btn", "green_confirm_btn"]
+    
+    while time.time() - start_clear_time < 60: # ให้เวลาเคลียร์สูงสุด 60 วินาที
+        
+        # เป้าหมายสูงสุด: เช็คก่อนเลยว่าถึงหน้า Main Menu หรือยัง?
+        try:
+            pyautogui.locateOnScreen(ASSETS["main_menu_sign"], confidence=CONFIDENCE)
+            print("\n" + "=" * 55)
+            print("🎉 กลับถึงหน้า Main Menu เรียบร้อย!")
+            print("=" * 55)
+            return True
+        except pyautogui.ImageNotFoundException:
+            pass # ถ้ายังไม่เจอ แปลว่ายังมีอะไรบังอยู่ ลุยสแกนปุ่มต่อ
             
-    print("\n✅ แก้ Anti-AFK เสร็จสมบูรณ์!")
+        # กวาดสายตาหาปุ่มปิด Pop-up 
+        clicked_any = False
+        for btn in popup_buttons:
+            # ใช้ timeout สั้นๆ แค่ 0.5 วินาที เพื่อให้มันกวาดตาเช็คทุกปุ่มอย่างรวดเร็ว
+            if click_image(btn, timeout=0.5, delay_after=1.5, confidence=0.75):
+                clicked_any = True
+                break # พอกดปุ่มใดปุ่มหนึ่งสำเร็จ ให้ออกจากลูป for กลับไปตั้งต้นเช็ค Main Menu ใหม่
+                
+        # ถ้ากวาดตาดูแล้วไม่เจอปุ่มอะไรให้กดเลย อาจจะติดแอนิเมชันแจกของ ให้รอแป๊บนึงแล้ววนลูปใหม่
+        if not clicked_any:
+            time.sleep(0.5)
+            
+    print("❌ วนลูปเคลียร์ Pop-up นานเกินไป (60 วินาที) หาหน้า Main ไม่เจอ")
+    return False
+
+
+def is_afk_screen_present(threshold=AFK_THRESHOLD, monitor_index=1):
+    """
+    ฟังก์ชันช่วยเช็คแบบเรียลไทม์ว่าป้าย Anti-AFK ยังอยู่บนจอหรือไม่
+    """
+    if AFK_TEMPLATE_GRAY is None:
+        return False
+        
+    with MSS() as sct:
+        screenshot = np.array(sct.grab(sct.monitors[monitor_index]))
+        screen_gray = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
+        res = cv2.matchTemplate(screen_gray, AFK_TEMPLATE_GRAY, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(res)
+        
+        return max_val >= threshold
+
+def solve_afk_puzzle():
+    """
+    แก้ Anti-AFK แบบ Dynamic Loop ทำจนกว่าป้าย AFK จะหายไป
+    """
+    print("\n🚨 [DETECTED] เจอหน้าจอ Anti-AFK! เริ่มแก้วนลูปแบบไดนามิก...")
+    print("-" * 50)
+    
+    stage = 1
+    max_retries = 10 # 🛡️ ระบบเซฟตี้ ป้องกันลูปนรก (ถ้าแก้เกิน 10 รอบแปลว่าเกมค้างหรือบอทเอ๋อ ให้บังคับออก)
+    
+    # 🔄 ลูปจะทำงานก็ต่อเมื่อ "หน้า AFK ยังแสดงอยู่บนจอ" เท่านั้น
+    while is_afk_screen_present():
+        if stage > max_retries:
+            print("❌ [ERROR] วนลูปแก้ AFK เกิน 10 รอบ! ระบบอาจขัดข้อง บังคับออกเพื่อป้องกันจอค้าง")
+            break
+            
+        print(f"\n🧩 กำลังแก้ด่านที่ {stage}")
+        print("⏳ รอการ์ดเซ็ตใหม่ปรากฏและหยุดนิ่ง...")
+        
+        # 1. รอภาพนิ่ง
+        current_cards = wait_for_stable_cards(timeout=10, stable_time=0.5)
+        if current_cards is None:
+            print("⚠️ แคปการ์ดไม่สำเร็จ หรือภาพไม่นิ่ง ลองเช็คใหม่ในรอบถัดไป...")
+            time.sleep(1)
+            continue
+            
+        # 2. วิเคราะห์หาใบที่แปลก (เปิด Debug ไว้ เพื่อให้พิมพ์ Matrix ลง Terminal)
+        target1, target2, conf = detect_odd_two_cards(current_cards, method="ncc", debug=True)
+        
+        if conf < 0.05:
+            print(f"⚠️ Confidence ต่ำ ({conf:.2%}) ลองแคปภาพใหม่เพื่อความชัวร์...")
+            time.sleep(1.0)
+            # โหมดเซฟภาพ Debug: ไพ่ที่แคปใหม่จะถูกเซฟลงโฟลเดอร์ debug เสมอ
+            current_cards = capture_cards(debug=True)
+            target1, target2, conf = detect_odd_two_cards(current_cards, method="ncc", debug=True)
+        else:
+            # ถ้ามั่นใจ ก็สั่งเซฟภาพไพ่ชุดนี้ไว้ดูเล่นในโฟลเดอร์ debug ด้วย
+            capture_cards(debug=True)
+        
+        print(f"🎯 แปลก 2 ใบ: ใบที่ {target1+1} และ ใบที่ {target2+1}")
+        
+        # 3. กดการ์ด
+        time.sleep(0.5)
+        click_card(target1)
+        time.sleep(0.3)
+        click_card(target2)
+        
+        # 4. รอให้เกมประมวลผลและเช็คผลลัพธ์
+        print("⏳ รอดูผลลัพธ์และแอนิเมชันของเกม...")
+        time.sleep(3.5) 
+        
+        stage += 1
+        
+    print("\n✅ หน้าต่าง Anti-AFK หายไปแล้ว! กลับสู่กระบวนการปกติ")
     print("-" * 50)
 
 
-def wait_for_stable_cards(timeout=15, stable_time=1.5):
-    
+def wait_for_stable_cards(timeout=20, stable_time=1.0):
+    """
+    รอภาพนิ่ง ปรับ timeout เพิ่มเป็น 20 วิ และลดเวลารอนิ่งเหลือ 1.0 วิ 
+    เพื่อให้จับภาพด่าน 1 และ 2 ได้ทันก่อนหมดเวลา
+    """
     start = time.time()
     prev_cards = None
     stable_start = None
@@ -333,21 +479,21 @@ def wait_for_stable_cards(timeout=15, stable_time=1.5):
             
             if curr_cards is not None and len(curr_cards) == 6:
                 if prev_cards is not None:
-                    
+                    # เทียบความต่างภาพ
                     diff = sum(cv2.norm(c, p, cv2.NORM_L2) for c, p in zip(curr_cards, prev_cards))
                     
-                    if diff < 500: 
+                    if diff < 600:  # ขยายเกณฑ์ความนิ่งนิดหน่อย เผื่อมีเอฟเฟกต์แสงวิ้งๆ
                         if stable_start is None:
                             stable_start = time.time()
                         elif time.time() - stable_start >= stable_time:
                             print("  📸 ภาพหยุดนิ่งแล้ว! พร้อมวิเคราะห์")
-                            return curr_cards 
+                            return curr_cards
                     else:
-                        stable_start = None 
+                        stable_start = None
                 
                 prev_cards = curr_cards
             
-            time.sleep(0.2)
+            time.sleep(0.25)
             
     print("⚠️ รอภาพนิ่งนานเกินไป (Timeout)")
     return None
