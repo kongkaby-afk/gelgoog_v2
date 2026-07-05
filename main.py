@@ -8,6 +8,8 @@ from src.phase1_prep import run_phase_1
 from src.phase2_gameplay import run_phase_2
 from src.phase3_endgame import run_phase_3
 
+
+
 def emergency_quit():
     """ฟังก์ชันฉุกเฉินสำหรับปิดโปรแกรมทันทีเมื่อกด Q"""
     print("\n🛑 [QUIT] ได้รับคำสั่งยกเลิกจากปุ่ม Q ปิดบอทอย่างเป็นทางการ!")
@@ -68,9 +70,10 @@ def start_full_cycle_bot():
             print("⚠️ Phase 3 ทำงานผิดพลาด ระบบอาจจะค้างอยู่ที่หน้าไหนสักแห่ง")
             break
             
-        print(f"✅ จบรอบที่ {round_number} สำเร็จอย่างงดงาม!\n")
+        print(f"✅ จบรอบที่ {round_number} \n")
         round_number += 1
         time.sleep(2) # พักเครื่อง 2 วินาทีก่อนเริ่มรอบถัดไป
+
 
 if __name__ == "__main__":
     start_full_cycle_bot()
