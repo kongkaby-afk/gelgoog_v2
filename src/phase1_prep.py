@@ -3,16 +3,14 @@ import time
 import cv2
 import os
 import sys
-
+import random
 CONFIDENCE = 0.8 
 
 def resource_path(relative_path):
     """ฟังก์ชันหาที่อยู่ไฟล์รูปภาพ ไม่ว่าจะรันแบบ .py หรือ .exe"""
     try:
-        # ถ้าถูกรันเป็น .exe (PyInstaller จะสร้างตัวแปร _MEIPASS ขึ้นมา)
         base_path = sys._MEIPASS
     except Exception:
-        # ถ้าถูกรันเป็นโค้ด .py ปกติ
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
@@ -24,7 +22,9 @@ def click_image(image_name, timeout=10, delay_after=0.5):
         try:
             location = pyautogui.locateCenterOnScreen(actual_path, confidence=CONFIDENCE)
             if location is not None:
-                pyautogui.moveTo(location.x, location.y, duration=0.2)
+                # 👇 [แก้ไขตรงนี้] สุ่มเวลาเลื่อนเมาส์ 0.7 - 1.0 วินาที ให้เหมือนคน
+                move_duration = random.uniform(0.7, 1.0)
+                pyautogui.moveTo(location.x, location.y, duration=move_duration)
                 pyautogui.click()
                 print(f"✅ คลิก {image_name} สำเร็จ!")
                 time.sleep(delay_after)

@@ -7,6 +7,7 @@ import pyautogui
 import time
 import keyboard
 from mss import MSS
+import random
 
 def resource_path(relative_path):
     """ฟังก์ชันหาที่อยู่ไฟล์รูปภาพ ไม่ว่าจะรันแบบ .py หรือ .exe"""
@@ -153,11 +154,13 @@ def detect_odd_two_cards(images, method="ncc", debug=True):
 # ==========================================
 # 🖱️ ระบบคลิกการ์ดและ UI
 # ==========================================
-def click_card(index, duration=0.05):
+def click_card(index): # เอา duration=0.05 ออก ให้บังคับใช้ของ Human-like แทน
     region = cards_regions[index]
     center_x = int(region[0] + region[2] / 2)
     center_y = int(region[1] + region[3] / 2)
-    pyautogui.moveTo(center_x, center_y, duration=duration)
+    # 👇 [แก้ไขตรงนี้] สุ่มเวลาเลื่อนเมาส์
+    move_duration = random.uniform(0.7, 1.0)
+    pyautogui.moveTo(center_x, center_y, duration=move_duration)
     pyautogui.click()
     print(f"  🖱️ คลิกการ์ดใบที่ {index + 1} ({center_x}, {center_y})")
 
@@ -181,7 +184,9 @@ def click_image(image_key, timeout=10, delay_after=0.5, confidence=None):
         try:
             location = pyautogui.locateCenterOnScreen(template_path, confidence=conf)
             if location is not None:
-                pyautogui.moveTo(location.x, location.y, duration=0.1)
+                # 👇 [แก้ไขตรงนี้] สุ่มเวลาเลื่อนเมาส์
+                move_duration = random.uniform(0.7, 1.0)
+                pyautogui.moveTo(location.x, location.y, duration=move_duration)
                 pyautogui.click()
                 print(f"✅ คลิก [{image_key}] สำเร็จ!")
                 time.sleep(delay_after)
