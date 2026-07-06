@@ -1,61 +1,103 @@
 import pyautogui
 import time
 import cv2
+import os
+import sys
 
 CONFIDENCE = 0.8 
 
-def click_image(image_path, timeout=10, delay_after=0.5):
-    print(f"🔍 กำลังหาและคลิก [{image_path}]...")
+def resource_path(relative_path):
+    """ฟังก์ชันหาที่อยู่ไฟล์รูปภาพ ไม่ว่าจะรันแบบ .py หรือ .exe"""
+    try:
+        # ถ้าถูกรันเป็น .exe (PyInstaller จะสร้างตัวแปร _MEIPASS ขึ้นมา)
+        base_path = sys._MEIPASS
+    except Exception:
+        # ถ้าถูกรันเป็นโค้ด .py ปกติ
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+def click_image(image_name, timeout=10, delay_after=0.5):
+    actual_path = resource_path(image_name)
+    print(f"🔍 กำลังหาและคลิก [{image_name}]...")
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            location = pyautogui.locateCenterOnScreen(image_path, confidence=CONFIDENCE)
+            location = pyautogui.locateCenterOnScreen(actual_path, confidence=CONFIDENCE)
             if location is not None:
                 pyautogui.moveTo(location.x, location.y, duration=0.2)
                 pyautogui.click()
-                print(f"✅ คลิก {image_path} สำเร็จ!")
+                print(f"✅ คลิก {image_name} สำเร็จ!")
                 time.sleep(delay_after)
                 return True
         except pyautogui.ImageNotFoundException:
             pass
         time.sleep(0.3)
-    print(f"❌ หมดเวลา! หา {image_path} ไม่เจอ")
+    print(f"❌ หมดเวลา! หา {image_name} ไม่เจอ")
     return False
 
-def wait_for_image(image_path, timeout=60):
-    print(f"⏳ กำลังรอให้ [{image_path}] ปรากฏขึ้นมา...")
+def wait_for_image(image_name, timeout=60):
+    actual_path = resource_path(image_name)
+    print(f"⏳ กำลังรอให้ [{image_name}] ปรากฏขึ้นมา...")
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            location = pyautogui.locateCenterOnScreen(image_path, confidence=CONFIDENCE)
+            location = pyautogui.locateCenterOnScreen(actual_path, confidence=CONFIDENCE)
             if location is not None:
-                print(f"👀 เจอ {image_path} แล้ว!")
+                print(f"👀 เจอ {image_name} แล้ว!")
                 return location
         except pyautogui.ImageNotFoundException:
             pass
         time.sleep(0.2)
-    print(f"❌ หมดเวลาคอย! ไม่พบ {image_path}")
+    print(f"❌ หมดเวลาคอย! ไม่พบ {image_name}")
     return None
 
-def wait_until_gone(image_path, timeout=15):
-    print(f"⏳ กำลังรอให้ [{image_path}] หายไปจากหน้าจอ...")
+def wait_until_gone(image_name, timeout=15):
+    actual_path = resource_path(image_name)
+    print(f"⏳ กำลังรอให้ [{image_name}] หายไปจากหน้าจอ...")
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            pyautogui.locateOnScreen(image_path, confidence=CONFIDENCE)
+            pyautogui.locateOnScreen(actual_path, confidence=CONFIDENCE)
             time.sleep(0.3) 
         except pyautogui.ImageNotFoundException:
-            print(f"✅ [{image_path}] หายไปแล้ว! ระบบพร้อมลุยสเต็ปต่อไป")
+            print(f"✅ [{image_name}] หายไปแล้ว! ระบบพร้อมลุยสเต็ปต่อไป")
             return True
     print(f"❌ หมดเวลา! หน้าจอยังค้างอยู่ที่เดิม")
     return False
+
+def clear_popups_before_start():
+    """กวาดล้าง Pop-up ทั้งหมดก่อนเริ่ม Phase 1 (กันเหนียว)"""
+    print("\n🧹 [CLEANUP] กวาดล้าง Pop-up ก่อนเริ่ม Phase 1...")
+    
+    # ลิสต์ปุ่มทั้งหมดที่เราต้องการเคลียร์
+    popup_buttons = [
+        "assets/ok_btn.png", 
+        "assets/confirm_btn.png", 
+        "assets/green_confirm_btn.png",
+        "assets/level_up_confirm_btn.png", 
+        "assets/treasure_confirm_btn.png"
+    ]
+    
+    # วนลูปเช็ค 3 รอบเพื่อความชัวร์ว่าเคลียร์หมด
+    for _ in range(3):
+        clicked = False
+        for btn in popup_buttons:
+            # ใช้ timeout สั้นๆ แค่ 0.2 วินาทีพอ
+            if click_image(btn, timeout=0.2, delay_after=0.5):
+                clicked = True
+        if not clicked:
+            break # ถ้าไม่เจอปุ่มอะไรให้กดแล้ว ก็จบการเคลียร์
+    print("✅ เคลียร์หน้าจอสะอาดพร้อมเริ่ม Phase 1")
 
 def run_phase_1():
     print("="*50)
     print("🚀 [PHASE 1] เริ่มต้นกระบวนการเตรียมตัว")
     print("="*50)
     
-    # 1. กดปุ่ม Play! หน้าหลัก (ใช้รูปแรก)
+    # 0. สั่งเคลียร์ Pop-up ก่อนเริ่มกันเหนียว
+    clear_popups_before_start()
+    
+    # 1. กดปุ่ม Play! หน้าหลัก
     if not click_image('assets/play_btn_main.png'): return False
     
     # ยืนยันว่าเข้าหน้า Shop 
@@ -83,7 +125,7 @@ def run_phase_1():
         print("⚠️ ไม่ได้ Double Coin ตามเวลาที่กำหนด ยกเลิกการทำงาน")
         return False
         
-    # 6. กด Play! อีกครั้งเพื่อเข้าเกม (ใช้รูปที่สอง)
+    # 6. กด Play! อีกครั้งเพื่อเข้าเกม
     if not click_image('assets/play_btn_shop.png'): return False
     
     # 7. เข้าเกมและกด Boost

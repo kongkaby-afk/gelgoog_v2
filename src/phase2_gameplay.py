@@ -6,6 +6,16 @@ from mss import MSS
 import tensorflow as tf
 from collections import deque
 import pyautogui
+import os
+import sys
+
+def resource_path(relative_path):
+    """ฟังก์ชันหาที่อยู่ไฟล์ ไม่ว่าจะรันแบบ .py หรือ .exe"""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 pydirectinput.PAUSE = 0.0
 
@@ -21,7 +31,9 @@ KEY_JUMP = 'f'
 KEY_SLIDE = 'j'   
 
 print("📦 กำลังโหลดสมองกล V2 'bot_brain_v2.h5'...")
-model = tf.keras.models.load_model('models/bot_brain_v2.h5')
+# ใช้ resource_path เพื่อให้หาไฟล์โมเดลเจอตอนเป็น .exe
+model_path = resource_path('models/bot_brain_v2.h5')
+model = tf.keras.models.load_model(model_path)
 print("✅ โหลดสมองกลสำเร็จ!")
 
 def run_phase_2():
@@ -34,17 +46,16 @@ def run_phase_2():
     frame_count = 0 
 
     with MSS() as sct:
-        # ใช้ monitors[1] ตามโค้ดต้นฉบับของคุณ
         monitor = sct.monitors[1]
         
         while True:
             start_time = time.time()
             
-            # 💡 เช็คว่าตายหรือยังทุกๆ 20 เฟรม (ลดภาระ CPU)
             if frame_count % 20 == 0:
                 try:
-                    # ถ้าเจอปุ่ม Relay ถือว่าเกมจบรอบแล้ว ให้ตัดจบ Phase 2 
-                    if pyautogui.locateOnScreen('assets/relay_btn.png', confidence=0.8):
+                    # ใช้ resource_path เพื่อหารูปปุ่ม Relay ให้เจอ
+                    relay_btn_path = resource_path('assets/relay_btn.png')
+                    if pyautogui.locateOnScreen(relay_btn_path, confidence=0.8):
                         print("\n💀 ตรวจพบว่าตัวละครหมดแรง/ตายแล้ว! หยุดการบังคับ...")
                         pydirectinput.keyUp(KEY_JUMP)
                         pydirectinput.keyUp(KEY_SLIDE)
@@ -57,27 +68,21 @@ def run_phase_2():
                     
             frame_count += 1
             
-            # 📸 1. ดักจับภาพหน้าจอปัจจุบัน
             screenshot = np.array(sct.grab(monitor))
             gray_screen = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
             
-            # ครอบพิกัดภาพ (Crop ROI) ตามที่คุณตั้งไว้
             roi_screen = gray_screen[Y_START:Y_END, X_START:X_END]
             final_ai_vision = cv2.resize(roi_screen, (AI_WIDTH, AI_HEIGHT))
             
-            # โยนภาพปัจจุบันเข้าไปใน Buffer ความจำ
             frame_buffer.append(final_ai_vision)
             
-            # 🔮 2. ถ้าสะสมภาพครบ 3 เฟรมแล้ว ค่อยให้ AI ทำนาย
             if len(frame_buffer) == 3:
                 stacked_frames = np.stack(frame_buffer, axis=-1)
                 input_frame = stacked_frames.reshape(1, AI_HEIGHT, AI_WIDTH, 3) / 255.0
                 
                 prediction = model(input_frame, training=False)[0].numpy()
                 action_idx = np.argmax(prediction)
-                confidence = prediction[action_idx] * 100
                 
-                # 🕹️ 3. สั่งการคีย์บอร์ด
                 if action_idx != current_action_state:
                     if action_idx == 0:  
                         pydirectinput.keyUp(KEY_SLIDE)  
@@ -91,7 +96,6 @@ def run_phase_2():
                         
                     current_action_state = action_idx
             
-            # ⏱️ ระบบหน่วงเวลา FPS ตามโค้ดต้นฉบับ
             elapsed = time.time() - start_time
             time.sleep(max(0.001, 0.033 - elapsed))
 
