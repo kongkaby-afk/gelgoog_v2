@@ -4,6 +4,7 @@ import cv2
 import os
 import sys
 import random
+
 CONFIDENCE = 0.8 
 
 def resource_path(relative_path):
@@ -20,20 +21,25 @@ def click_image(image_name, timeout=10, delay_after=0.5):
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            location = pyautogui.locateCenterOnScreen(actual_path, confidence=CONFIDENCE)
-            if location is not None:
-                # 🎲 สุ่มพฤติกรรมการตอบสนองแบบไม่มีแพทเทิร์น
+            box = pyautogui.locateOnScreen(actual_path, confidence=CONFIDENCE)
+            if box is not None:
+                left, top, width, height = box
+                pad_x = int(width * 0.15)
+                pad_y = int(height * 0.15)
+                target_x = random.randint(left + pad_x, left + width - pad_x)
+                target_y = random.randint(top + pad_y, top + height - pad_y)
+
                 chance = random.randint(1, 100)
                 if chance <= 20:
-                    move_duration = random.uniform(0.15, 0.3)
+                    reaction_time = random.uniform(0.15, 0.3)
                 elif chance <= 80:
-                    move_duration = random.uniform(0.4, 0.8)
+                    reaction_time = random.uniform(0.4, 0.8)
                 else:
-                    move_duration = random.uniform(0.85, 1.2)
+                    reaction_time = random.uniform(0.85, 1.2)
 
-                pyautogui.moveTo(location.x, location.y, duration=move_duration)
+                pyautogui.moveTo(target_x, target_y, duration=reaction_time, tween=pyautogui.easeOutQuad)
                 pyautogui.click()
-                print(f"✅ คลิก {image_name} สำเร็จ!")
+                print(f"✅ คลิก {image_name} สำเร็จ! (ดีเลย์ {reaction_time:.2f}s)")
                 time.sleep(delay_after)
                 return True
         except pyautogui.ImageNotFoundException:
@@ -48,10 +54,11 @@ def wait_for_image(image_name, timeout=60):
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            location = pyautogui.locateCenterOnScreen(actual_path, confidence=CONFIDENCE)
-            if location is not None:
+            # คืนค่ากลับเป็นกรอบ Box เพื่อให้ปุ่มสับไวเอาไปใช้ได้
+            box = pyautogui.locateOnScreen(actual_path, confidence=CONFIDENCE)
+            if box is not None:
                 print(f"👀 เจอ {image_name} แล้ว!")
-                return location
+                return box 
         except pyautogui.ImageNotFoundException:
             pass
         time.sleep(0.2)
@@ -76,7 +83,6 @@ def clear_popups_before_start():
     """กวาดล้าง Pop-up ทั้งหมดก่อนเริ่ม Phase 1 (กันเหนียว)"""
     print("\n🧹 [CLEANUP] กวาดล้าง Pop-up ก่อนเริ่ม Phase 1...")
     
-    # ลิสต์ปุ่มทั้งหมดที่เราต้องการเคลียร์
     popup_buttons = [
         "assets/ok_btn.png", 
         "assets/confirm_btn.png", 
@@ -85,15 +91,13 @@ def clear_popups_before_start():
         "assets/treasure_confirm_btn.png"
     ]
     
-    # วนลูปเช็ค 3 รอบเพื่อความชัวร์ว่าเคลียร์หมด
     for _ in range(3):
         clicked = False
         for btn in popup_buttons:
-            # ใช้ timeout สั้นๆ แค่ 0.2 วินาทีพอ
             if click_image(btn, timeout=0.2, delay_after=0.5):
                 clicked = True
         if not clicked:
-            break # ถ้าไม่เจอปุ่มอะไรให้กดแล้ว ก็จบการเคลียร์
+            break
     print("✅ เคลียร์หน้าจอสะอาดพร้อมเริ่ม Phase 1")
 
 def run_phase_1():
@@ -137,13 +141,21 @@ def run_phase_1():
     
     # 7. เข้าเกมและกด Boost
     print("🎮 กำลังโหลดเข้าเกม เตรียมตัวกด Boost...")
-    boost_location = wait_for_image('assets/in_game_boost.png', timeout=30)
+    boost_box = wait_for_image('assets/in_game_boost.png', timeout=30)
     
-    if boost_location:
+    if boost_box:
         print("⚡ เจอปุ่ม Boost แล้ว! หน่วงเวลา 1.5 วินาที...")
         time.sleep(1.5)
         
-        pyautogui.moveTo(boost_location.x, boost_location.y, duration=0.1)
+        # ถอดรหัสกล่อง Box และสุ่มกดทั่วปุ่มแบบสายฟ้าแลบ
+        left, top, width, height = boost_box
+        pad_x, pad_y = int(width * 0.15), int(height * 0.15)
+        target_x = random.randint(left + pad_x, left + width - pad_x)
+        target_y = random.randint(top + pad_y, top + height - pad_y)
+        
+        fast_reaction = random.uniform(0.08, 0.2)
+        print(f"   -> พุ่งกด Boost ด้วยความเร็ว {fast_reaction:.2f} วินาที")
+        pyautogui.moveTo(target_x, target_y, duration=fast_reaction, tween=pyautogui.easeOutQuad)
         pyautogui.click()
         print("✅ กดใช้ Boost ในเกมสำเร็จ!")
         

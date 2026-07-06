@@ -8,6 +8,7 @@ import time
 import keyboard
 from mss import MSS
 import random
+from utils import write_log
 
 def resource_path(relative_path):
     """ฟังก์ชันหาที่อยู่ไฟล์รูปภาพ ไม่ว่าจะรันแบบ .py หรือ .exe"""
@@ -63,7 +64,6 @@ def load_template(path, flags=cv2.IMREAD_UNCHANGED):
         print(f"✅ โหลด Template '{path}' สำเร็จ ({img.shape})")
     return img
 
-# 🎯 จุดสำคัญ: ครอบที่อยู่ไฟล์ทั้งหมดด้วย resource_path()
 ASSETS = {
     "afk_page": resource_path("assets/afk_page.png"),
     "relay_btn": resource_path("assets/relay_btn.png"),
@@ -81,8 +81,6 @@ ASSETS = {
 
 templates = {name: load_template(path, cv2.IMREAD_UNCHANGED) for name, path in ASSETS.items()}
 AFK_TEMPLATE_GRAY = cv2.imread(ASSETS["afk_page"], cv2.IMREAD_GRAYSCALE)
-
-# ... (โค้ดฟังก์ชัน capture_cards และอื่นๆ ด้านล่างคงเดิมได้เลยครับ) ...
 
 # ==========================================
 # 🖼️ ระบบ Capture การ์ด
@@ -156,10 +154,16 @@ def detect_odd_two_cards(images, method="ncc", debug=True):
 # ==========================================
 def click_card(index):
     region = cards_regions[index]
-    center_x = int(region[0] + region[2] / 2)
-    center_y = int(region[1] + region[3] / 2)
+    left, top, width, height = int(region[0]), int(region[1]), int(region[2]), int(region[3])
     
-    # 🎲 สุ่มพฤติกรรมการตอบสนองแบบไม่มีแพทเทิร์น
+    # 🎯 การ์ดใบใหญ่มาก หดขอบเข้ามา 20% ให้จิ้มแถวๆ เนื้อการ์ดด้านใน
+    pad_x = int(width * 0.20)
+    pad_y = int(height * 0.20)
+    
+    # 🎲 สุ่มจุดคลิกทั่วบริเวณใบการ์ด
+    target_x = random.randint(left + pad_x, left + width - pad_x)
+    target_y = random.randint(top + pad_y, top + height - pad_y)
+    
     chance = random.randint(1, 100)
     if chance <= 20:
         move_duration = random.uniform(0.15, 0.3)
@@ -168,9 +172,9 @@ def click_card(index):
     else:
         move_duration = random.uniform(0.85, 1.2)
         
-    pyautogui.moveTo(center_x, center_y, duration=move_duration)
+    pyautogui.moveTo(target_x, target_y, duration=move_duration, tween=pyautogui.easeOutQuad)
     pyautogui.click()
-    print(f"  🖱️ คลิกการ์ดใบที่ {index + 1} ({center_x}, {center_y}) [Speed: {move_duration:.2f}s]")
+    print(f"  🖱️ คลิกการ์ดใบที่ {index + 1} ({target_x}, {target_y}) [Speed: {move_duration:.2f}s]")
 
 def click_image(image_key, timeout=10, delay_after=0.5, confidence=None):
     if image_key not in templates:
@@ -190,13 +194,27 @@ def click_image(image_key, timeout=10, delay_after=0.5, confidence=None):
     
     while time.time() - start_time < timeout:
         try:
-            location = pyautogui.locateCenterOnScreen(template_path, confidence=conf)
-            if location is not None:
-                # 👇 [แก้ไขตรงนี้] สุ่มเวลาเลื่อนเมาส์
-                move_duration = random.uniform(0.7, 1.0)
-                pyautogui.moveTo(location.x, location.y, duration=move_duration)
+            # ดึงเอากรอบปุ่มมาคำนวณ
+            box = pyautogui.locateOnScreen(template_path, confidence=conf)
+            if box is not None:
+                left, top, width, height = box
+                pad_x = int(width * 0.15)
+                pad_y = int(height * 0.15)
+                
+                target_x = random.randint(left + pad_x, left + width - pad_x)
+                target_y = random.randint(top + pad_y, top + height - pad_y)
+
+                chance = random.randint(1, 100)
+                if chance <= 20:
+                    reaction_time = random.uniform(0.15, 0.3)
+                elif chance <= 80:
+                    reaction_time = random.uniform(0.4, 0.8)
+                else:
+                    reaction_time = random.uniform(0.85, 1.2)
+
+                pyautogui.moveTo(target_x, target_y, duration=reaction_time, tween=pyautogui.easeOutQuad)
                 pyautogui.click()
-                print(f"✅ คลิก [{image_key}] สำเร็จ!")
+                print(f"✅ คลิก [{image_key}] สำเร็จ! (ดีเลย์ {reaction_time:.2f}s)")
                 time.sleep(delay_after)
                 return True
         except pyautogui.ImageNotFoundException:
@@ -219,10 +237,10 @@ def wait_for_image(image_key, timeout=60):
     
     while time.time() - start < timeout:
         try:
-            loc = pyautogui.locateCenterOnScreen(template_path, confidence=CONFIDENCE)
-            if loc is not None:
+            box = pyautogui.locateOnScreen(template_path, confidence=CONFIDENCE)
+            if box is not None:
                 print(f"👀 เจอ [{image_key}] แล้ว")
-                return loc
+                return box
         except:
             pass
         time.sleep(0.3)
@@ -232,31 +250,6 @@ def wait_for_image(image_key, timeout=60):
 # ==========================================
 # 🛡️ ระบบตรวจจับและแก้หน้า Anti-AFK
 # ==========================================
-def wait_for_afk_page(timeout=AFK_WAIT_TIMEOUT, threshold=AFK_THRESHOLD, monitor_index=1):
-    if AFK_TEMPLATE_GRAY is None:
-        return False
-    
-    print(f"⏳ เริ่มตรวจหาหน้า Anti-AFK (timeout {timeout} วิ)...")
-    start = time.time()
-    
-    with MSS() as sct:
-        while time.time() - start < timeout:
-            try:
-                screenshot = np.array(sct.grab(sct.monitors[monitor_index]))
-                screen_gray = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
-                res = cv2.matchTemplate(screen_gray, AFK_TEMPLATE_GRAY, cv2.TM_CCOEFF_NORMED)
-                _, max_val, _, _ = cv2.minMaxLoc(res)
-                
-                if max_val >= threshold:
-                    print(f"🚨 เจอหน้า Anti-AFK! max_val={max_val:.3f}")
-                    return True
-            except Exception:
-                pass
-            time.sleep(0.5)
-            
-    print("⏩ ไม่พบหน้าต่าง Anti-AFK ข้ามไปขั้นตอนต่อไป")
-    return False
-
 def is_afk_screen_present(threshold=AFK_THRESHOLD, monitor_index=1):
     if AFK_TEMPLATE_GRAY is None:
         return False
@@ -269,6 +262,10 @@ def is_afk_screen_present(threshold=AFK_THRESHOLD, monitor_index=1):
 
 def solve_afk_puzzle():
     print("\n🚨 [DETECTED] เจอหน้าจอ Anti-AFK! เริ่มแก้วนลูปแบบไดนามิก...")
+    
+    # 👇 สั่งบันทึก Log ตอนเจอ Anti-AFK ทันที! (บันทึกเป็นระดับ WARNING)
+    write_log("ตรวจพบหน้าจอ Anti-AFK และระบบกำลังเริ่มแก้ปริศนา", level="WARNING")
+    
     print("-" * 50)
     
     stage = 1
@@ -304,11 +301,9 @@ def solve_afk_puzzle():
         stage += 1
         
     print("\n✅ หน้าต่าง Anti-AFK หายไปแล้ว! กลับสู่กระบวนการปกติ")
+    write_log(f"แก้ปริศนา Anti-AFK สำเร็จ (ใช้ไป {stage-1} ด่าน)", level="INFO")
     print("-" * 50)
 
-# ==========================================
-# 🚀 ฟังก์ชันหลัก Phase 3 (สแกนเคลียร์ Pop-up)
-# ==========================================
 # ==========================================
 # 🚀 ฟังก์ชันหลัก Phase 3 (สแกนเคลียร์ Pop-up แบบไดนามิก)
 # ==========================================
@@ -321,18 +316,31 @@ def run_phase_3():
     print("ℹ️  หมายเหตุ: หากต้องการหยุดฉุกเฉิน ให้ลาก Mouse ไปมุมจอซ้ายบนสุด")
     print("-" * 55)
     
-    if not wait_for_image("relay_btn", timeout=600):
+    # 1. รอจนกว่าจะเจอปุ่ม Relay 
+    relay_box = wait_for_image("relay_btn", timeout=600)
+    if not relay_box:
         print("❌ รอนานเกินไป ไม่พบปุ่ม Relay")
         return False
     
-    click_image("relay_btn", timeout=5)
+    # 2. พุ่งกดปุ่ม Relay ทันทีแบบสุ่มและไวจัดๆ
+    left, top, width, height = relay_box
+    pad_x, pad_y = int(width * 0.15), int(height * 0.15)
+    target_x = random.randint(left + pad_x, left + width - pad_x)
+    target_y = random.randint(top + pad_y, top + height - pad_y)
+    
+    fast_reaction = random.uniform(0.08, 0.2)
+    print(f"⚡ เจอ Relay แล้ว! พุ่งกดด้วยเวลาตอบสนอง {fast_reaction:.2f} วินาที!")
+    pyautogui.moveTo(target_x, target_y, duration=fast_reaction, tween=pyautogui.easeOutQuad)
+    pyautogui.click()
+    time.sleep(0.5) 
+    
+    # 3. 🚨 [สำคัญ] คืนโค้ดกดปุ่มออกจากด่าน 3 ปุ่มกลับมาแล้วครับ! 🚨
     click_image("stop_btn", timeout=5)
     click_image("quit_btn", timeout=5)
     time.sleep(1)
     click_image("quit_confirm_btn", timeout=5)
     
-    # ❌ (เอาการรอ AFK 15 วินาทีตรงนี้ออกไปแล้ว) ❌
-    
+    # 4. หลังจากออกจากด่านเสร็จ ค่อยเคลียร์หน้าจอด้วยความเร็วสูง
     print("\n🔄 เข้าสู่กระบวนการเคลียร์หน้าจอ (พุ่งชนปุ่ม OK ก่อน ถ้าไม่เจอค่อยเช็ค AFK)...")
     start_clear_time = time.time()
     
@@ -346,7 +354,6 @@ def run_phase_3():
     ]
     
     while time.time() - start_clear_time < 60: 
-        # 1. เช็คว่าถึงหน้า Main Menu หรือยัง (เป้าหมายสูงสุด)
         try:
             pyautogui.locateOnScreen(ASSETS["main_menu_sign"], confidence=CONFIDENCE)
             print("\n" + "=" * 55)
@@ -356,21 +363,16 @@ def run_phase_3():
         except pyautogui.ImageNotFoundException:
             pass 
             
-        # 2. กวาดสายตาหาปุ่ม OK, Confirm ต่างๆ ทันที
         clicked_any = False
         for btn in popup_buttons:
-            # ให้เวลาสแกนหาปุ่มแค่ 0.2 วิ (มองแวบเดียว) ถ้าเจอก็กดเลย
             if click_image(btn, timeout=0.2, delay_after=1.5, confidence=0.75):
                 clicked_any = True
                 break 
                 
-        # 3. ถ้ามองหาปุ่ม OK ไม่เจอเลย! (หน้าจออาจจะติด AFK หรือแค่กำลังโหลดฉาก)
         if not clicked_any:
-            # 🕵️‍♂️ หันไปเช็คแบบเร็วๆ ว่ามีหน้า Anti-AFK ขึ้นมาขวางไหม?
             if is_afk_screen_present():
-                solve_afk_puzzle() # ถ้าเจอ ก็เรียกฟังก์ชันแก้ AFK
+                solve_afk_puzzle() 
             else:
-                # ถ้าไม่เจอทั้งปุ่ม และไม่เจอ AFK แปลว่าเกมกำลังโหลดแอนิเมชัน ก็รอแป๊บนึง
                 time.sleep(0.5)
             
     print("❌ วนลูปเคลียร์ Pop-up นานเกินไป (60 วินาที) หาหน้า Main ไม่เจอ")
