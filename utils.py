@@ -23,10 +23,18 @@ def click_image(image_name, timeout=10, delay_after=0.5):
         try:
             location = pyautogui.locateCenterOnScreen(actual_path, confidence=CONFIDENCE)
             if location is not None:
-                # 👇 [แก้ไขตรงนี้] สุ่มเวลาเลื่อนเมาส์ 0.7 - 1.0 วินาที ให้เหมือนคน
-                move_duration = random.uniform(0.7, 1.0)
+                # 🎲 สุ่มพฤติกรรมการตอบสนองแบบไม่มีแพทเทิร์น
+                chance = random.randint(1, 100)
+                if chance <= 20:
+                    move_duration = random.uniform(0.15, 0.3)
+                elif chance <= 80:
+                    move_duration = random.uniform(0.4, 0.8)
+                else:
+                    move_duration = random.uniform(0.85, 1.2)
+
                 pyautogui.moveTo(location.x, location.y, duration=move_duration)
                 pyautogui.click()
+                print(f"✅ คลิก {image_name} สำเร็จ!")
                 time.sleep(delay_after)
                 return True
         except pyautogui.ImageNotFoundException:

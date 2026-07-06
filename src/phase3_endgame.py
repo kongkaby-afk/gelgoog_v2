@@ -154,15 +154,23 @@ def detect_odd_two_cards(images, method="ncc", debug=True):
 # ==========================================
 # 🖱️ ระบบคลิกการ์ดและ UI
 # ==========================================
-def click_card(index): # เอา duration=0.05 ออก ให้บังคับใช้ของ Human-like แทน
+def click_card(index):
     region = cards_regions[index]
     center_x = int(region[0] + region[2] / 2)
     center_y = int(region[1] + region[3] / 2)
-    # 👇 [แก้ไขตรงนี้] สุ่มเวลาเลื่อนเมาส์
-    move_duration = random.uniform(0.7, 1.0)
+    
+    # 🎲 สุ่มพฤติกรรมการตอบสนองแบบไม่มีแพทเทิร์น
+    chance = random.randint(1, 100)
+    if chance <= 20:
+        move_duration = random.uniform(0.15, 0.3)
+    elif chance <= 80:
+        move_duration = random.uniform(0.4, 0.8)
+    else:
+        move_duration = random.uniform(0.85, 1.2)
+        
     pyautogui.moveTo(center_x, center_y, duration=move_duration)
     pyautogui.click()
-    print(f"  🖱️ คลิกการ์ดใบที่ {index + 1} ({center_x}, {center_y})")
+    print(f"  🖱️ คลิกการ์ดใบที่ {index + 1} ({center_x}, {center_y}) [Speed: {move_duration:.2f}s]")
 
 def click_image(image_key, timeout=10, delay_after=0.5, confidence=None):
     if image_key not in templates:
@@ -301,6 +309,9 @@ def solve_afk_puzzle():
 # ==========================================
 # 🚀 ฟังก์ชันหลัก Phase 3 (สแกนเคลียร์ Pop-up)
 # ==========================================
+# ==========================================
+# 🚀 ฟังก์ชันหลัก Phase 3 (สแกนเคลียร์ Pop-up แบบไดนามิก)
+# ==========================================
 def run_phase_3():
     print("=" * 55)
     print("🏁 [PHASE 3] เริ่มต้นระบบจัดการหลังจบเกม")
@@ -320,13 +331,9 @@ def run_phase_3():
     time.sleep(1)
     click_image("quit_confirm_btn", timeout=5)
     
-    print("\n🛡️ กำลังตรวจสอบหน้าจอ Anti-AFK...")
-    if wait_for_afk_page(timeout=15): 
-        solve_afk_puzzle()
-    else:
-        print("⏩ ไม่พบหน้าต่าง Anti-AFK ข้ามไปหน้า Result ทันที")
+    # ❌ (เอาการรอ AFK 15 วินาทีตรงนี้ออกไปแล้ว) ❌
     
-    print("\n🔄 กำลังเคลียร์หน้าต่าง Pop-up ทั้งหมดจนกว่าจะถึงหน้า Main Menu...")
+    print("\n🔄 เข้าสู่กระบวนการเคลียร์หน้าจอ (พุ่งชนปุ่ม OK ก่อน ถ้าไม่เจอค่อยเช็ค AFK)...")
     start_clear_time = time.time()
     
     popup_buttons = [
@@ -339,6 +346,7 @@ def run_phase_3():
     ]
     
     while time.time() - start_clear_time < 60: 
+        # 1. เช็คว่าถึงหน้า Main Menu หรือยัง (เป้าหมายสูงสุด)
         try:
             pyautogui.locateOnScreen(ASSETS["main_menu_sign"], confidence=CONFIDENCE)
             print("\n" + "=" * 55)
@@ -348,14 +356,22 @@ def run_phase_3():
         except pyautogui.ImageNotFoundException:
             pass 
             
+        # 2. กวาดสายตาหาปุ่ม OK, Confirm ต่างๆ ทันที
         clicked_any = False
         for btn in popup_buttons:
-            if click_image(btn, timeout=0.5, delay_after=1.5, confidence=0.75):
+            # ให้เวลาสแกนหาปุ่มแค่ 0.2 วิ (มองแวบเดียว) ถ้าเจอก็กดเลย
+            if click_image(btn, timeout=0.2, delay_after=1.5, confidence=0.75):
                 clicked_any = True
                 break 
                 
+        # 3. ถ้ามองหาปุ่ม OK ไม่เจอเลย! (หน้าจออาจจะติด AFK หรือแค่กำลังโหลดฉาก)
         if not clicked_any:
-            time.sleep(0.5)
+            # 🕵️‍♂️ หันไปเช็คแบบเร็วๆ ว่ามีหน้า Anti-AFK ขึ้นมาขวางไหม?
+            if is_afk_screen_present():
+                solve_afk_puzzle() # ถ้าเจอ ก็เรียกฟังก์ชันแก้ AFK
+            else:
+                # ถ้าไม่เจอทั้งปุ่ม และไม่เจอ AFK แปลว่าเกมกำลังโหลดแอนิเมชัน ก็รอแป๊บนึง
+                time.sleep(0.5)
             
     print("❌ วนลูปเคลียร์ Pop-up นานเกินไป (60 วินาที) หาหน้า Main ไม่เจอ")
     return False
