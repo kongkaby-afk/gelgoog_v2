@@ -1,0 +1,9 @@
+{
+    "mode": "AFK 1 Box",
+    "buy_boost": false,
+    "buy_relay": false,
+    "roll_double_coin": false,
+    "use_in_game_boost": true,
+    "use_relay_death": false,
+    "auto_claim_relic": true
+}
