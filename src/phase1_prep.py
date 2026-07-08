@@ -7,7 +7,7 @@ import os
 import sys
 import random
 
-CONFIDENCE = 0.8 
+CONFIDENCE = 0.7
 
 def resource_path(relative_path):
     try:
